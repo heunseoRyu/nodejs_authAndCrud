@@ -1,0 +1,142 @@
+{% extends 'layout.html' %} <!-- layout.html 불러옴 -->
+
+{% block content %}
+    <div class="timeline">
+      {% if user %} <!-- 만약 user가 존재했다면 -> 로그인 했다면?-->
+        <div>
+          <!-- 글 등록 가능-->
+          <form id="twit-form" action="/post" method="post" enctype="multipart/form-data">
+            <div class="input-group">
+              <textarea id="twit" name="content" maxlength="140"></textarea>
+            </div>
+            <div class="img-preview">
+              <img id="img-preview" src="" style="display: none;" width="250" alt="미리보기">
+              <input id="img-url" type="hidden" name="url">
+            </div>
+            <div>
+              <label id="img-label" for="img">사진 업로드</label>
+              <input id="img" type="file" accept="image/*">
+              <button id="twit-btn" type="submit" class="btn">짹짹</button>
+            </div>
+          </form>
+        </div>
+      {% endif %} <!-- if로그인 끝-->
+
+      <div class="twits"> 
+        <!-- 태그로 검색 -->
+        <form id="hashtag-form" action="/hashtag">
+          <input type="text" name="hashtag" placeholder="태그 검색">
+          <button class="btn">검색</button>
+        </form>
+        {% for twit in twits %} <!--for문으로 게시글 목록 생성 -->
+          <div class="twit">
+            <input type="hidden" value="{{twit.User.id}}" class="twit-user-id">
+            <input type="hidden" value="{{twit.id}}" id=".twit-id">
+            <div class="twit-author">{{twit.User.nick}}</div>
+            <!-- 내가 아님 AND 팔로잉 목록에 없다면 -> 팔로우하기 뜸-->
+            {% if not followingIdList.includes(twit.User.id) and twit.User.id !== user.id %}
+              <button class="twit-follow">팔로우하기</button>
+            {% endif %}
+            {% if followingIdList.includes(twit.User.id) and twit.User.id !== user.id %}
+              <button class="twit-follow-end">팔로우끊기</button>
+            {% endif %}
+            <!-- 내용-->
+            <div class="twit-content">{{twit.content}}</div>
+            <!-- 이미지가 존재한다면-> 띄우기 -->
+            {% if twit.img %}
+              <div class="twit-img"><img src="{{twit.img}}" alt="섬네일"></div>
+            {% endif %}
+            {% if twit.User.id == user.id %}
+              <button class="delete-post" value="{{twit.id}}">삭제</button>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+{% endblock %}
+
+{% block script %}
+  <script>
+    // 이미지를 서버에 업로드 하고, 이미 사용된 url과 미리보기를 확인할 수 있도록 하는 것.
+    if (document.getElementById('img')) { // 'img'라는 ID를 가진 요소가 있는지 확인합니다.
+      document.getElementById('img').addEventListener('change', function(e) { // 'img' 요소에서 파일이 변경될 때(파일이 선택될 때) 이벤트 리스너를 추가합니다.
+        const formData = new FormData(); // 새로운 FormData 객체를 생성하여 파일 데이터를 전송할 준비를 합니다.
+        console.log(this, this.files); // 선택된 파일과 해당 요소의 정보를 콘솔에 출력하여 확인합니다.
+        formData.append('img', this.files[0]); // FormData에 선택한 파일의 첫 번째 파일을 'img'라는 키로 추가합니다.
+        axios.post('/post/img', formData) // '/post/img' 경로로 FormData를 포함해 POST 요청을 보냅니다.
+          .then((res) => { // 요청이 성공했을 때 응답 데이터를 처리합니다.
+            document.getElementById('img-url').value = res.data.url; // 업로드된 이미지의 URL을 'img-url' 요소의 값으로 설정합니다.
+            document.getElementById('img-preview').src = res.data.url; // 'img-preview' 요소의 이미지 소스를 업로드된 이미지의 URL로 설정합니다.
+            document.getElementById('img-preview').style.display = 'inline'; // 'img-preview' 요소를 화면에 표시합니다.
+          })
+          .catch((err) => { // 요청이 실패했을 때 에러를 처리합니다.
+            console.error(err); // 에러 메시지를 콘솔에 출력합니다.
+          });
+      });
+    }
+    /*
+    팔로우 버튼을 클릭할 때, 
+    대상 사용자가 로그인한 사용자와 다를 경우 팔로우 확인 창을 띄우고, 
+    확인 시 팔로우 요청을 서버에 전송하며, 
+    팔로우 요청이 성공하면 페이지를 새로 고쳐서 팔로우 상태를 반영
+    */
+    document.querySelectorAll('.twit-follow').forEach(function(tag) { // '.twit-follow' 클래스를 가진 모든 요소에 대해 반복문을 실행합니다.
+      tag.addEventListener('click', function() { // 각 요소에 클릭 이벤트 리스너를 추가합니다.
+        const myId = document.querySelector('#my-id'); // 현재 로그인한 사용자의 ID를 나타내는 '#my-id' 요소를 가져옵니다.
+        if (myId) { // '#my-id' 요소가 존재하는지 확인합니다 (즉, 사용자가 로그인한 상태인지 확인).
+          const userId = tag.parentNode.querySelector('.twit-user-id').value; // 클릭한 요소의 부모 요소에서 '.twit-user-id' 값을 가져와 팔로우할 대상의 ID를 얻습니다.
+          if (userId !== myId.value) { // 팔로우할 대상이 로그인한 사용자가 아닌지 확인합니다.
+            if (confirm('팔로잉하시겠습니까?')) { // 팔로우 여부를 묻는 확인창을 표시합니다.
+              axios.post(`/user/${userId}/follow`) // 확인 버튼을 누르면 해당 사용자를 팔로우하기 위해 POST 요청을 보냅니다.
+                .then(() => { // 요청이 성공하면
+                  location.reload(); // 페이지를 새로 고침하여 팔로우 상태를 업데이트합니다.
+                })
+                .catch((err) => { // 요청이 실패했을 때
+                  console.error(err); // 에러 메시지를 콘솔에 출력합니다.
+                });
+            }
+          }
+        }
+      });
+    });
+
+    document.querySelectorAll('.twit-follow-end').forEach(function(tag) { // '.twit-follow' 클래스를 가진 모든 요소에 대해 반복문을 실행합니다.
+      tag.addEventListener('click', function() { // 각 요소에 클릭 이벤트 리스너를 추가합니다.
+        const myId = document.querySelector('#my-id'); // 현재 로그인한 사용자의 ID를 나타내는 '#my-id' 요소를 가져옵니다.
+        if (myId) { // '#my-id' 요소가 존재하는지 확인합니다 (즉, 사용자가 로그인한 상태인지 확인).
+          const userId = tag.parentNode.querySelector('.twit-user-id').value; // 클릭한 요소의 부모 요소에서 '.twit-user-id' 값을 가져와 팔로우할 대상의 ID를 얻습니다.
+          if (userId !== myId.value) { // 팔로우할 대상이 로그인한 사용자가 아닌지 확인합니다.
+            if (confirm('팔로우를 끊으시겠습니까?')) { // 팔로우 여부를 묻는 확인창을 표시합니다.
+              axios.delete(`/user/${userId}/unfollow`) // 확인 버튼을 누르면 해당 사용자를 팔로우하기 위해 POST 요청을 보냅니다.
+                .then(() => { // 요청이 성공하면
+                  location.reload(); // 페이지를 새로 고침하여 팔로우 상태를 업데이트합니다.
+                })
+                .catch((err) => { // 요청이 실패했을 때
+                  console.error(err); // 에러 메시지를 콘솔에 출력합니다.
+                });
+            }
+          }
+        }
+      });
+    });
+
+    document.querySelectorAll('.delete-post').forEach(function(tag) {
+      tag.addEventListener('click', function() {
+        const postId = tag.value;
+        console.log(postId);
+        if(postId){
+          if (confirm('정말 이 게시글을 삭제하시겠습니까?')) { 
+            axios.delete(`/post/${postId}`)
+              .then(() => {
+                alert('게시글이 삭제되었습니다.');
+                location.reload();
+              })
+              .catch((error) => {
+                console.error(error);
+              });
+          }
+        }
+      });
+  });
+  </script>
+{% endblock %}
